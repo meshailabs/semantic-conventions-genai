@@ -11,7 +11,7 @@ nodes are plain functions, so per the litmus tests only framework-owned
 operations are emitted.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -42,7 +42,7 @@ def gated_action(state: GateState) -> GateState:
         {
             "action": state["action"],
             "reason": "human_input",
-            "deadline": (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat(),
+            "deadline": (datetime.now(UTC) + timedelta(hours=4)).isoformat(),
         }
     )
     if decision["approved"]:
