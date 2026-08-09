@@ -19,12 +19,15 @@ The scenario exercises all three terminal outcomes of a pause:
 - **approved** — the decision arrives through `Command(resume=...)` delivered
   to a fresh graph instance over the same checkpointer, modeling resumption
   in a different worker after the original span closed. The resumed segment
-  carries the same `gen_ai.agent.execution.id` and identifies the suspended
-  boundary via the flat `gen_ai.agent.resumed_from.type` /
-  `gen_ai.agent.resumed_from.id` pair.
-- **refused** — the delivered decision is a decline; the gated action never
-  continues, no `gen_ai.agent.resumed` event is emitted, and the refusal is
-  recorded as a governance outcome rather than an error.
+  carries the same `gen_ai.agent.execution.id` and names the persisted
+  checkpoint it was reconstructed from via the flat
+  `gen_ai.agent.resumed_from.type` / `gen_ai.agent.resumed_from.id` pair;
+  the pause linkage is carried by the resolution event.
+- **refused** — the delivered decision is a decline; the graph re-enters only
+  to record the decline and reach END, the gated action never continues, and
+  the refusal is recorded as a governance outcome rather than an error. The
+  outcome is determined by the resolution record, not by the presence or
+  absence of a resumed event.
 - **expired** — an expiry sweep finds the pause still pending in persisted
   state with its configured deadline passed, and emits the expiry as a record
   of absence. A pause with no resolution record stays pending; nothing is

@@ -117,10 +117,16 @@ events:
       record the `resumed_from` pair. The two attributes MUST be recorded
       together or not at all.
 
-      For a pause that required a decision, a resumed segment follows only
-      the `approved` resolution, and only if execution actually continues;
-      `refused` and `expired` resolutions terminate the logical execution at
-      the suspended boundary and no resumed segment follows them.
+      For a pause that required a decision, the resolution and the resumed
+      event record distinct facts: the resolution records the outcome, and a
+      resumed event records that execution continued. After an `approved`
+      resolution, a resumed segment follows if execution actually continues.
+      After a `refused` or `expired` resolution the gated work does not
+      continue; when the framework re-enters execution anyway, for example to
+      record the outcome or run a decline path, instrumentations MAY emit a
+      resumed event for that segment. Consumers MUST determine the outcome of
+      a pause from its resolution record, never from the presence or absence
+      of a resumed event.
     stability: development
     attributes:
       - ref: gen_ai.agent.execution.id

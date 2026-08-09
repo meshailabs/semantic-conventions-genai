@@ -76,7 +76,8 @@ def _invoke_agent_span():
 def _pause_until_interrupt(graph, config, action: str):
     """Run the graph to its interrupt and emit paused + checkpointed.
 
-    Returns the pause id taken from the Interrupt object LangGraph returns.
+    Returns the pause id from the Interrupt object LangGraph returns and the
+    checkpoint id from the checkpointer's saved state.
     """
     thread_id = config["configurable"]["thread_id"]
     result = graph.invoke({"action": action}, config)
@@ -103,7 +104,7 @@ def _pause_until_interrupt(graph, config, action: str):
             "gen_ai.agent.name": AGENT_NAME,
         },
     )
-    return pause_id
+    return pause_id, checkpoint_id
 
 
 def run_approved_flow(checkpointer: InMemorySaver):
@@ -116,7 +117,9 @@ def run_approved_flow(checkpointer: InMemorySaver):
         span.set_attribute("gen_ai.operation.name", "invoke_agent")
         span.set_attribute("gen_ai.agent.name", AGENT_NAME)
         span.set_attribute("gen_ai.agent.execution.id", thread_id)
-        pause_id = _pause_until_interrupt(build_graph(checkpointer), config, "release payment batch")
+        pause_id, checkpoint_id = _pause_until_interrupt(
+            build_graph(checkpointer), config, "release payment batch"
+        )
     # Segment 1's span is closed; the hosting process could exit here.
 
     # A different graph instance over the same checkpointer models a restart
@@ -136,12 +139,15 @@ def run_approved_flow(checkpointer: InMemorySaver):
                 "gen_ai.agent.name": AGENT_NAME,
             },
         )
+        # The new worker reconstructs state from the persisted checkpoint, so
+        # the resumed segment names the CHECKPOINT it continues from; the
+        # pause linkage is already carried by the resolution event above.
         _emit(
             "gen_ai.agent.resumed",
             {
                 "gen_ai.agent.execution.id": thread_id,
-                "gen_ai.agent.resumed_from.type": "pause",
-                "gen_ai.agent.resumed_from.id": pause_id,
+                "gen_ai.agent.resumed_from.type": "checkpoint",
+                "gen_ai.agent.resumed_from.id": checkpoint_id,
                 "gen_ai.agent.name": AGENT_NAME,
             },
         )
@@ -160,7 +166,7 @@ def run_refused_flow(checkpointer: InMemorySaver):
         span.set_attribute("gen_ai.agent.name", AGENT_NAME)
         span.set_attribute("gen_ai.agent.execution.id", thread_id)
         graph = build_graph(checkpointer)
-        pause_id = _pause_until_interrupt(graph, config, "drop staging database")
+        pause_id, _checkpoint_id = _pause_until_interrupt(graph, config, "drop staging database")
 
         decision = {"approved": False}
         _emit(
@@ -172,10 +178,14 @@ def run_refused_flow(checkpointer: InMemorySaver):
                 "gen_ai.agent.name": AGENT_NAME,
             },
         )
-        # Delivering the refusal lets the graph record the decline and reach
-        # END; execution of the gated action never continues, so no
-        # gen_ai.agent.resumed event is emitted. A refusal is a governance
-        # outcome, not an error: the span stays unset/ok.
+        # Delivering the refusal re-enters the graph so it can record the
+        # decline and reach END; the gated action itself never continues.
+        # Continuation happens within this same still-open span, and per the
+        # conventions instrumentations MAY emit a resumed event for such a
+        # decline-path segment; this scenario omits it, and the outcome is
+        # determined by the resolution record above, never by the presence or
+        # absence of a resumed event. A refusal is a governance outcome, not
+        # an error: the span stays unset/ok.
         outcome = graph.invoke(Command(resume=decision), config)
         print("    ->", outcome["result"])
 
@@ -197,7 +207,7 @@ def run_expired_flow(checkpointer: InMemorySaver):
         span.set_attribute("gen_ai.agent.name", AGENT_NAME)
         span.set_attribute("gen_ai.agent.execution.id", thread_id)
         graph = build_graph(checkpointer)
-        pause_id = _pause_until_interrupt(graph, config, "rotate signing keys")
+        pause_id, _checkpoint_id = _pause_until_interrupt(graph, config, "rotate signing keys")
 
     # Later, an expiry sweep inspects the thread's persisted state: the pause
     # is still pending and its payload carries the configured deadline.
