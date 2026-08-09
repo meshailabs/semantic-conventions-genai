@@ -87,6 +87,7 @@ def _pause_until_interrupt(graph, config, action: str):
             "gen_ai.agent.execution.id": thread_id,
             "gen_ai.agent.pause.reason": intr.value["reason"],
             "gen_ai.agent.pause.id": pause_id,
+            "gen_ai.agent.pause.deadline": intr.value["deadline"],
             "gen_ai.agent.name": AGENT_NAME,
         },
     )
@@ -143,6 +144,9 @@ def run_approved_flow(checkpointer: InMemorySaver):
         # The new worker reconstructs state from the persisted checkpoint, so
         # the resumed segment names the CHECKPOINT it continues from; the
         # pause linkage is already carried by the resolution event above.
+        # Emitted at segment start, before the invoke, by choice: if the
+        # invoke throws, the record says continuation was attempted, and the
+        # span's error status carries the failure.
         _emit(
             "gen_ai.agent.resumed",
             {

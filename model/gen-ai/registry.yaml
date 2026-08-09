@@ -991,6 +991,18 @@ attributes:
     brief: The reason agent execution paused.
     examples: ["human_input", "scheduled_delay"]
     stability: development
+  - key: gen_ai.agent.pause.deadline
+    type: string
+    brief: The configured deadline of a pause, as an RFC 3339 timestamp.
+    note: |
+      When present, lets a consumer distinguish a pending pause whose
+      deadline lies ahead, a pause whose deadline has passed while the
+      expiry record is in flight or the producer has died, and a pause with
+      no deadline that may pend indefinitely. Recording it does not change
+      the rule that the meaning of unresolved silence is consumer policy;
+      it gives that policy something to act on.
+    examples: ["2026-08-09T18:00:00Z"]
+    stability: development
   - key: gen_ai.agent.pause.resolution
     type:
       members:

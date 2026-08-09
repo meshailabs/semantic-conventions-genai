@@ -20,6 +20,7 @@
     "gen_ai.agent.paused": [
       "gen_ai.agent.execution.id",
       "gen_ai.agent.name",
+      "gen_ai.agent.pause.deadline",
       "gen_ai.agent.pause.id",
       "gen_ai.agent.pause.reason"
     ],

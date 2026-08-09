@@ -31,7 +31,9 @@ The scenario exercises all three terminal outcomes of a pause:
 - **expired** — an expiry sweep finds the pause still pending in persisted
   state with its configured deadline passed, and emits the expiry as a record
   of absence. A pause with no resolution record stays pending; nothing is
-  inferred from silence.
+  inferred from silence. The sweep's clock in this scenario is simulated:
+  the pause id and deadline are read back from persisted state, but the
+  "deadline has passed" timing is staged, not runtime-derived.
 
 No LLM calls are involved: graph nodes are plain functions, so per the
 reference litmus tests only framework-owned operations are emitted.

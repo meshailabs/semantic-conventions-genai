@@ -67,11 +67,12 @@ events:
       approval, an external system, rate limiting, or a scheduled delay.
     note: >
       Records the suspension of a long-running or asynchronous agent
-      execution. When a later `gen_ai.agent.resumed` or
-      `gen_ai.agent.pause.resolved` event is expected to reference this
-      boundary, instrumentations MUST record a `gen_ai.agent.pause.id` so the
-      edge is expressible. A recorded pause with no subsequent resolution
-      record is pending; see `gen_ai.agent.pause.resolution`.
+      execution. The pause id identifies this boundary for later
+      `gen_ai.agent.resumed` and `gen_ai.agent.pause.resolved` records; it is
+      required because whether a pause will later be resolved is not knowable
+      at emit time, and a pause recorded without an id can never be resolved
+      or resumed from. A recorded pause with no subsequent resolution record
+      is pending; see `gen_ai.agent.pause.resolution`.
     stability: development
     attributes:
       - ref: gen_ai.agent.execution.id
@@ -79,10 +80,10 @@ events:
       - ref: gen_ai.agent.pause.reason
         requirement_level: recommended
       - ref: gen_ai.agent.pause.id
+        requirement_level: required
+      - ref: gen_ai.agent.pause.deadline
         requirement_level:
-          conditionally_required: >
-            When a later `gen_ai.agent.resumed` or `gen_ai.agent.pause.resolved`
-            event is expected to reference this boundary.
+          recommended: When the pause has a configured deadline.
       - ref: gen_ai.agent.id
         requirement_level: recommended
       - ref: gen_ai.agent.name
@@ -128,9 +129,12 @@ events:
       After a `refused` or `expired` resolution the gated work does not
       continue; when the framework re-enters execution anyway, for example to
       record the outcome or run a decline path, instrumentations MAY emit a
-      resumed event for that segment. Consumers MUST determine the outcome of
-      a pause from its resolution record, never from the presence or absence
-      of a resumed event.
+      resumed event for that segment. When a resumed event is emitted for
+      such a decline-path segment, the pause's resolution record SHOULD
+      already exist or be emitted together with it, so that a consumer is
+      never left to distinguish it from an approved resume by waiting.
+      Consumers MUST determine the outcome of a pause from its resolution
+      record, never from the presence or absence of a resumed event.
     stability: development
     attributes:
       - ref: gen_ai.agent.execution.id
@@ -159,11 +163,14 @@ events:
       absence of record: instrumentations SHOULD emit it when the pause has a
       configured deadline and that deadline passes without a decision, and
       MUST NOT emit `expired` for a pause that has no configured deadline.
-      The deadline itself is producer-local configuration and is not
-      represented in telemetry; the requirement constrains producer behavior
-      and is not validatable from the record alone. What unresolved silence
-      means, for example a producer that died holding the pause, is consumer
-      policy and is deliberately not defined by this vocabulary.
+      The configured deadline MAY be recorded on the paused event via
+      `gen_ai.agent.pause.deadline`, which lets a consumer distinguish a
+      pending pause whose deadline lies ahead from one whose deadline has
+      passed with the expiry record in flight or the producer dead; absent
+      that attribute, the requirement constrains producer behavior and is
+      not validatable from the record alone. What unresolved silence means,
+      for example a producer that died holding the pause, is consumer policy
+      and is deliberately not defined by this vocabulary.
     stability: development
     attributes:
       - ref: gen_ai.agent.execution.id
