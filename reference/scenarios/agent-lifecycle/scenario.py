@@ -95,11 +95,15 @@ def _pause_until_interrupt(graph, config, action: str):
     # comes from the thread's runtime state, not from anything we invented.
     saved = graph.get_state(config)
     checkpoint_id = saved.config["configurable"]["checkpoint_id"]
+    # The checkpoint is taken at the pause boundary, so it carries the pause
+    # id: a consumer reaching this checkpoint via resumed_from can also reach
+    # the resolution that authorized continuing from it.
     _emit(
         "gen_ai.agent.checkpointed",
         {
             "gen_ai.agent.execution.id": thread_id,
             "gen_ai.agent.checkpoint.id": checkpoint_id,
+            "gen_ai.agent.pause.id": pause_id,
             "gen_ai.agent.name": AGENT_NAME,
         },
     )

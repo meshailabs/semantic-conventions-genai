@@ -60,3 +60,8 @@ Declared per the evaluation rubric, so review can weigh them explicitly:
   provider-assigned hosted-agent identifiers and discourages in-memory
   instance ids, and LangGraph has no such identifier. The events carry
   `gen_ai.agent.name` instead.
+- **Only `resumed_from.type=checkpoint` is exercised.** LangGraph
+  checkpoints at every interrupt, so a resumed segment here always
+  reconstructs from a persisted checkpoint. The `pause` member (a suspended
+  boundary with no persisted checkpoint) is defined by the conventions but
+  not demonstrated by this scenario.

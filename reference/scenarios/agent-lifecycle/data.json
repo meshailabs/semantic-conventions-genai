@@ -9,7 +9,8 @@
     "gen_ai.agent.checkpointed": [
       "gen_ai.agent.checkpoint.id",
       "gen_ai.agent.execution.id",
-      "gen_ai.agent.name"
+      "gen_ai.agent.name",
+      "gen_ai.agent.pause.id"
     ],
     "gen_ai.agent.pause.resolved": [
       "gen_ai.agent.execution.id",

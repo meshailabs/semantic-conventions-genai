@@ -122,11 +122,16 @@ as indicated by `gen_ai.agent.resumed_from.type`. Together with a shared
 suspend/resume chain even when the original record is closed, sampled
 out, or exported in a separate trace.
 
-**[8] `gen_ai.agent.resumed_from.type`:** Carried as a flat attribute alongside `gen_ai.agent.resumed_from.id`
-rather than a structured value, so a consumer holding only the resumed
-record can tell what kind of boundary it references without resolving
-the counterpart event, which may be closed, sampled out, or exported in
-a different trace. Instrumentations MUST record
+**[8] `gen_ai.agent.resumed_from.type`:** Carrying the boundary kind at all means a consumer holding only the
+resumed record can tell what it references without resolving the
+counterpart event, which may be closed, sampled out, or exported in a
+different trace. It is carried as a flat attribute alongside
+`gen_ai.agent.resumed_from.id`, rather than as a structured value, per
+the authoring guidance to represent complex values as flat attributes
+and to assume backends do not index their individual properties;
+`gen_ai.tool.type` alongside `gen_ai.tool.call.id` is the existing
+precedent, and grouping resumptions by boundary type stays an ordinary
+query. Instrumentations MUST record
 `gen_ai.agent.resumed_from.type` and `gen_ai.agent.resumed_from.id`
 together or not at all.
 
