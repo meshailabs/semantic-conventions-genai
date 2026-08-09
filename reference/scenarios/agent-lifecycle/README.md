@@ -35,3 +35,25 @@ The scenario exercises all three terminal outcomes of a pause:
 
 No LLM calls are involved: graph nodes are plain functions, so per the
 reference litmus tests only framework-owned operations are emitted.
+
+## Capture notes
+
+Declared per the evaluation rubric, so review can weigh them explicitly:
+
+- **Resolution semantics are gate-level, not framework-level, in LangGraph.**
+  `interrupt()` payloads and `Command(resume=...)` values are
+  application-defined, so generic LangGraph instrumentation cannot know that
+  a given resume value means approved or refused; this scenario instruments
+  at the approval-gate boundary, where those semantics are owned. Frameworks
+  whose public API owns the decision (for example the OpenAI Agents SDK's
+  tool-approval `approve()` / `reject()`) are the natural second reference
+  for framework-derived `gen_ai.agent.pause.resolution`.
+- **`thread_id` maps to `gen_ai.agent.execution.id` only when a thread hosts
+  one logical execution**, as it does here. LangGraph threads can be reused
+  for multiple independent runs; instrumentations on multi-run threads need
+  a per-run identifier that persists across resume rather than the bare
+  thread id.
+- **`gen_ai.agent.id` is deliberately absent**: the registry reserves it for
+  provider-assigned hosted-agent identifiers and discourages in-memory
+  instance ids, and LangGraph has no such identifier. The events carry
+  `gen_ai.agent.name` instead.

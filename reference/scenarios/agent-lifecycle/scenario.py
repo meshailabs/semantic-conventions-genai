@@ -108,7 +108,12 @@ def _pause_until_interrupt(graph, config, action: str):
 
 
 def run_approved_flow(checkpointer: InMemorySaver):
-    """Pause at the gate, approve out of band, resume in a new segment."""
+    """Pause at the gate, approve out of band, resume in a new segment.
+
+    Each flow dedicates one LangGraph thread to one logical execution, so the
+    thread id satisfies the execution-id uniqueness requirement here; see the
+    README capture notes for the multi-run-thread caveat.
+    """
     print("  [lifecycle] approved: interrupt -> checkpoint -> Command(resume) in new segment")
     config = {"configurable": {"thread_id": "exec-approved-01"}}
     thread_id = config["configurable"]["thread_id"]
