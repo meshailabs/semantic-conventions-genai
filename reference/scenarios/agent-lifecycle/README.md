@@ -43,8 +43,9 @@ Declared per the evaluation rubric, so review can weigh them explicitly:
 - **Resolution semantics are gate-level, not framework-level, in LangGraph.**
   `interrupt()` payloads and `Command(resume=...)` values are
   application-defined, so generic LangGraph instrumentation cannot know that
-  a given resume value means approved or refused; this scenario instruments
-  at the approval-gate boundary, where those semantics are owned. Frameworks
+  a given resume value means approved or refused, nor that a payload field
+  carries the pause reason or deadline; this scenario instruments at the
+  approval-gate boundary, where those semantics are owned. Frameworks
   whose public API owns the decision (for example the OpenAI Agents SDK's
   tool-approval `approve()` / `reject()`) are the natural second reference
   for framework-derived `gen_ai.agent.pause.resolution`.
