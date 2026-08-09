@@ -1,17 +1,61 @@
-"""Reference implementation for agent lifecycle events (#159).
+"""Reference implementation for agent lifecycle events (#159), on LangGraph.
 
-Models a durable approval gate in front of a long-running agent: execution
-pauses awaiting a human decision, state is checkpointed, and the run either
-resumes in a new execution segment (approved), or terminates at the boundary
-(refused / expired). No LLM calls are involved; the lifecycle surface is
-framework-neutral by design.
+Instruments LangGraph's durable-interrupt API: `interrupt()` pauses a graph at
+a human-approval gate, a checkpointer persists state, and `Command(resume=...)`
+delivers the decision to a later invocation, possibly in a different process.
+Every lifecycle attribute is derived from LangGraph runtime state: the pause id
+from the returned `Interrupt` object, the execution id from the thread config,
+the checkpoint id from the checkpointer's saved state, and the resolution from
+the decision delivered through `Command`. No LLM calls are involved; graph
+nodes are plain functions, so per the litmus tests only framework-owned
+operations are emitted.
 """
 
+from datetime import datetime, timedelta, timezone
+from typing import TypedDict
+
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command, interrupt
 from opentelemetry.trace import SpanKind
 from reference_shared import flush_and_shutdown, reference_event_logger, reference_tracer, setup_otel
 
 _reference_tracer = reference_tracer()
 _LIFECYCLE_LOGGER = "gen_ai.agent.lifecycle.reference"
+
+AGENT_NAME = "payment_reconciler"
+
+
+class GateState(TypedDict, total=False):
+    action: str
+    approved: bool
+    result: str
+
+
+def gated_action(state: GateState) -> GateState:
+    """Perform a high-impact action only after an out-of-band human decision.
+
+    `interrupt()` suspends the graph here; the value it returns on a later
+    invocation is whatever `Command(resume=...)` delivered.
+    """
+    decision = interrupt(
+        {
+            "action": state["action"],
+            "reason": "human_input",
+            "deadline": (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat(),
+        }
+    )
+    if decision["approved"]:
+        return {"approved": True, "result": f"{state['action']}: done"}
+    return {"approved": False, "result": f"{state['action']}: declined"}
+
+
+def build_graph(checkpointer: InMemorySaver):
+    builder = StateGraph(GateState)
+    builder.add_node("gated_action", gated_action)
+    builder.add_edge(START, "gated_action")
+    builder.add_edge("gated_action", END)
+    return builder.compile(checkpointer=checkpointer)
 
 
 def _emit(event_name: str, attributes: dict) -> None:
@@ -22,148 +66,166 @@ def _emit(event_name: str, attributes: dict) -> None:
     )
 
 
-def _invoke_agent_span(name: str):
-    return _reference_tracer.start_as_current_span(name, kind=SpanKind.INTERNAL)
+def _invoke_agent_span():
+    span = _reference_tracer.start_as_current_span(
+        f"invoke_agent {AGENT_NAME}", kind=SpanKind.INTERNAL
+    )
+    return span
 
 
-def run_approved_flow():
-    """Pause for approval, checkpoint, approve, resume in a NEW segment.
+def _pause_until_interrupt(graph, config, action: str):
+    """Run the graph to its interrupt and emit paused + checkpointed.
 
-    The resumed segment carries the same execution.id and identifies the
-    suspended boundary via the flat resumed_from pair, reconstructing the
-    suspend/resume chain without resolving the original (closed) span.
+    Returns the pause id taken from the Interrupt object LangGraph returns.
     """
-    print("  [lifecycle] approved: pause -> checkpoint -> approve -> resume in new segment")
-    execution_id = "exec_ref_approved_01"
-    pause_id = "pause_ref_01"
-    checkpoint_id = "ck_ref_01"
+    thread_id = config["configurable"]["thread_id"]
+    result = graph.invoke({"action": action}, config)
+    (intr,) = result["__interrupt__"]
+    pause_id = intr.id
+    _emit(
+        "gen_ai.agent.paused",
+        {
+            "gen_ai.agent.execution.id": thread_id,
+            "gen_ai.agent.pause.reason": intr.value["reason"],
+            "gen_ai.agent.pause.id": pause_id,
+            "gen_ai.agent.name": AGENT_NAME,
+        },
+    )
+    # The checkpointer persisted the interrupted state; the saved checkpoint id
+    # comes from the thread's runtime state, not from anything we invented.
+    saved = graph.get_state(config)
+    checkpoint_id = saved.config["configurable"]["checkpoint_id"]
+    _emit(
+        "gen_ai.agent.checkpointed",
+        {
+            "gen_ai.agent.execution.id": thread_id,
+            "gen_ai.agent.checkpoint.id": checkpoint_id,
+            "gen_ai.agent.name": AGENT_NAME,
+        },
+    )
+    return pause_id
 
-    # Segment 1: runs until the approval gate suspends it.
-    with _invoke_agent_span("invoke_agent payment_reconciler") as span:
-        span.set_attribute("gen_ai.operation.name", "invoke_agent")
-        span.set_attribute("gen_ai.agent.name", "payment_reconciler")
-        span.set_attribute("gen_ai.agent.execution.id", execution_id)
-        _emit(
-            "gen_ai.agent.paused",
-            {
-                "gen_ai.agent.execution.id": execution_id,
-                "gen_ai.agent.pause.reason": "human_input",
-                "gen_ai.agent.pause.id": pause_id,
-            },
-        )
-        _emit(
-            "gen_ai.agent.checkpointed",
-            {
-                "gen_ai.agent.execution.id": execution_id,
-                "gen_ai.agent.checkpoint.id": checkpoint_id,
-            },
-        )
-    # Segment 1's span is now closed: the process hosting it may exit here.
 
-    # The decision arrives out of band (approval UI, ticket, chat).
-    # Segment 2: a different worker picks the run up from the checkpoint.
-    with _invoke_agent_span("invoke_agent payment_reconciler") as span:
+def run_approved_flow(checkpointer: InMemorySaver):
+    """Pause at the gate, approve out of band, resume in a new segment."""
+    print("  [lifecycle] approved: interrupt -> checkpoint -> Command(resume) in new segment")
+    config = {"configurable": {"thread_id": "exec-approved-01"}}
+    thread_id = config["configurable"]["thread_id"]
+
+    with _invoke_agent_span() as span:
         span.set_attribute("gen_ai.operation.name", "invoke_agent")
-        span.set_attribute("gen_ai.agent.name", "payment_reconciler")
-        span.set_attribute("gen_ai.agent.execution.id", execution_id)
+        span.set_attribute("gen_ai.agent.name", AGENT_NAME)
+        span.set_attribute("gen_ai.agent.execution.id", thread_id)
+        pause_id = _pause_until_interrupt(build_graph(checkpointer), config, "release payment batch")
+    # Segment 1's span is closed; the hosting process could exit here.
+
+    # A different graph instance over the same checkpointer models a restart
+    # in another worker. The human decision arrives through Command(resume=...).
+    graph2 = build_graph(checkpointer)
+    with _invoke_agent_span() as span:
+        span.set_attribute("gen_ai.operation.name", "invoke_agent")
+        span.set_attribute("gen_ai.agent.name", AGENT_NAME)
+        span.set_attribute("gen_ai.agent.execution.id", thread_id)
+        decision = {"approved": True}
         _emit(
             "gen_ai.agent.pause.resolved",
             {
-                "gen_ai.agent.execution.id": execution_id,
+                "gen_ai.agent.execution.id": thread_id,
                 "gen_ai.agent.pause.id": pause_id,
-                "gen_ai.agent.pause.resolution": "approved",
+                "gen_ai.agent.pause.resolution": "approved" if decision["approved"] else "refused",
+                "gen_ai.agent.name": AGENT_NAME,
             },
         )
-        # The resumed segment names the PAUSE it continues from, keeping the
-        # resolution -> resume linkage unambiguous when one execution holds
-        # several pauses or checkpoints. The checkpointed event above stands as
-        # an independent persistence fact; `resumed_from.type=checkpoint` is
-        # for durable recovery with no decision boundary (e.g. crash restart).
         _emit(
             "gen_ai.agent.resumed",
             {
-                "gen_ai.agent.execution.id": execution_id,
+                "gen_ai.agent.execution.id": thread_id,
                 "gen_ai.agent.resumed_from.type": "pause",
                 "gen_ai.agent.resumed_from.id": pause_id,
+                "gen_ai.agent.name": AGENT_NAME,
             },
         )
-        print("    -> resumed from", pause_id)
+        outcome = graph2.invoke(Command(resume=decision), config)
+        print("    ->", outcome["result"])
 
 
-def run_refused_flow():
-    """Pause for approval; the human says no. Execution ends at the boundary.
+def run_refused_flow(checkpointer: InMemorySaver):
+    """Pause at the gate; the human declines. No resumed segment follows."""
+    print("  [lifecycle] refused: interrupt -> Command(resume=declined) -> terminates at boundary")
+    config = {"configurable": {"thread_id": "exec-refused-01"}}
+    thread_id = config["configurable"]["thread_id"]
 
-    A refusal is a governance outcome, not an error: the span ends
-    unset/ok and the terminal fact is carried by the resolution event.
-    """
-    print("  [lifecycle] refused: pause -> refuse -> no resumed segment")
-    execution_id = "exec_ref_refused_01"
-    pause_id = "pause_ref_02"
-
-    with _invoke_agent_span("invoke_agent db_migrator") as span:
+    with _invoke_agent_span() as span:
         span.set_attribute("gen_ai.operation.name", "invoke_agent")
-        span.set_attribute("gen_ai.agent.name", "db_migrator")
-        span.set_attribute("gen_ai.agent.execution.id", execution_id)
-        _emit(
-            "gen_ai.agent.paused",
-            {
-                "gen_ai.agent.execution.id": execution_id,
-                "gen_ai.agent.pause.reason": "human_input",
-                "gen_ai.agent.pause.id": pause_id,
-            },
-        )
+        span.set_attribute("gen_ai.agent.name", AGENT_NAME)
+        span.set_attribute("gen_ai.agent.execution.id", thread_id)
+        graph = build_graph(checkpointer)
+        pause_id = _pause_until_interrupt(graph, config, "drop staging database")
+
+        decision = {"approved": False}
         _emit(
             "gen_ai.agent.pause.resolved",
             {
-                "gen_ai.agent.execution.id": execution_id,
+                "gen_ai.agent.execution.id": thread_id,
                 "gen_ai.agent.pause.id": pause_id,
-                "gen_ai.agent.pause.resolution": "refused",
+                "gen_ai.agent.pause.resolution": "approved" if decision["approved"] else "refused",
+                "gen_ai.agent.name": AGENT_NAME,
             },
         )
-        print("    -> refused; execution terminates at the boundary")
+        # Delivering the refusal lets the graph record the decline and reach
+        # END; execution of the gated action never continues, so no
+        # gen_ai.agent.resumed event is emitted. A refusal is a governance
+        # outcome, not an error: the span stays unset/ok.
+        outcome = graph.invoke(Command(resume=decision), config)
+        print("    ->", outcome["result"])
 
 
-def run_expired_flow():
-    """Pause with a configured deadline; nobody answers before it passes.
+def run_expired_flow(checkpointer: InMemorySaver):
+    """Pause with a deadline in the interrupt payload; nobody ever answers.
 
-    The producer emits `expired` because a deadline existed and passed: a
-    record of absence, not an inference from absence of record.
+    The expiry sweep reads the pending interrupt and its deadline back from
+    the thread's persisted state. The deadline exists in that state, so the
+    producer may emit `expired`; it is a record of absence, not an inference
+    from absence of record.
     """
-    print("  [lifecycle] expired: pause with deadline -> deadline passes -> expired")
-    execution_id = "exec_ref_expired_01"
-    pause_id = "pause_ref_03"
+    print("  [lifecycle] expired: interrupt with deadline -> deadline passes -> expired")
+    config = {"configurable": {"thread_id": "exec-expired-01"}}
+    thread_id = config["configurable"]["thread_id"]
 
-    with _invoke_agent_span("invoke_agent contract_summarizer") as span:
+    with _invoke_agent_span() as span:
         span.set_attribute("gen_ai.operation.name", "invoke_agent")
-        span.set_attribute("gen_ai.agent.name", "contract_summarizer")
-        span.set_attribute("gen_ai.agent.execution.id", execution_id)
-        _emit(
-            "gen_ai.agent.paused",
-            {
-                "gen_ai.agent.execution.id": execution_id,
-                "gen_ai.agent.pause.reason": "human_input",
-                "gen_ai.agent.pause.id": pause_id,
-            },
-        )
-        # The gate's configured deadline passes with no decision.
+        span.set_attribute("gen_ai.agent.name", AGENT_NAME)
+        span.set_attribute("gen_ai.agent.execution.id", thread_id)
+        graph = build_graph(checkpointer)
+        pause_id = _pause_until_interrupt(graph, config, "rotate signing keys")
+
+    # Later, an expiry sweep inspects the thread's persisted state: the pause
+    # is still pending and its payload carries the configured deadline.
+    state = build_graph(checkpointer).get_state(config)
+    (pending,) = state.interrupts
+    deadline = datetime.fromisoformat(pending.value["deadline"])
+    now = deadline + timedelta(minutes=1)  # the sweep runs after the deadline
+    if now > deadline:
         _emit(
             "gen_ai.agent.pause.resolved",
             {
-                "gen_ai.agent.execution.id": execution_id,
-                "gen_ai.agent.pause.id": pause_id,
+                "gen_ai.agent.execution.id": thread_id,
+                "gen_ai.agent.pause.id": pending.id,
                 "gen_ai.agent.pause.resolution": "expired",
+                "gen_ai.agent.name": AGENT_NAME,
             },
         )
+        assert pending.id == pause_id
         print("    -> expired; execution terminates at the boundary")
 
 
 def main():
     tp, lp, mp = setup_otel()
-    print("agent-lifecycle reference scenario")
+    print("agent-lifecycle reference scenario (LangGraph)")
     try:
-        run_approved_flow()
-        run_refused_flow()
-        run_expired_flow()
+        run_approved_flow(InMemorySaver())
+        run_refused_flow(InMemorySaver())
+        run_expired_flow(InMemorySaver())
     finally:
         flush_and_shutdown(tp, lp, mp)
 
