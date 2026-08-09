@@ -60,3 +60,105 @@ events:
         requirement_level:
           conditionally_required: Required if `exception.type` is not set, recommended otherwise.
       - ref: exception.stacktrace
+  - name: gen_ai.agent.paused
+    requirement_level: recommended
+    brief: >
+      Agent execution paused awaiting an external condition, such as human
+      approval, an external system, rate limiting, or a scheduled delay.
+    note: >
+      Records the suspension of a long-running or asynchronous agent
+      execution. When a later `gen_ai.agent.resumed` or
+      `gen_ai.agent.pause.resolved` event is expected to reference this
+      boundary, instrumentations MUST record a `gen_ai.agent.pause.id` so the
+      edge is expressible. A recorded pause with no subsequent resolution
+      record is pending; see `gen_ai.agent.pause.resolution`.
+    stability: development
+    attributes:
+      - ref: gen_ai.agent.execution.id
+        requirement_level: required
+      - ref: gen_ai.agent.pause.reason
+        requirement_level: recommended
+      - ref: gen_ai.agent.pause.id
+        requirement_level:
+          conditionally_required: >
+            When a later `gen_ai.agent.resumed` or `gen_ai.agent.pause.resolved`
+            event is expected to reference this boundary.
+      - ref: gen_ai.agent.id
+        requirement_level: recommended
+
+  - name: gen_ai.agent.checkpointed
+    requirement_level: recommended
+    brief: Agent state was persisted for durability or recovery.
+    note: >
+      Records the persistence of agent state such that execution can later
+      continue from the persisted state, including across process restarts or
+      in a different worker.
+    stability: development
+    attributes:
+      - ref: gen_ai.agent.execution.id
+        requirement_level: required
+      - ref: gen_ai.agent.checkpoint.id
+        requirement_level: required
+      - ref: gen_ai.agent.id
+        requirement_level: recommended
+
+  - name: gen_ai.agent.resumed
+    requirement_level: recommended
+    brief: Agent execution resumed after a suspended boundary.
+    note: >
+      When the resumed work begins a new active execution segment (after a
+      process restart, durable recovery, resumption in a different worker, or
+      when the prior segment was exported in a different trace),
+      instrumentations MUST identify the suspended boundary the segment
+      continues from via `gen_ai.agent.resumed_from.type` and
+      `gen_ai.agent.resumed_from.id`, and MUST record the same
+      `gen_ai.agent.execution.id` as the suspended segment. When resumption
+      continues within the same still-open span, instrumentations SHOULD NOT
+      record the `resumed_from` pair. The two attributes MUST be recorded
+      together or not at all.
+
+      For a pause that required a decision, a resumed segment follows only
+      the `approved` resolution, and only if execution actually continues;
+      `refused` and `expired` resolutions terminate the logical execution at
+      the suspended boundary and no resumed segment follows them.
+    stability: development
+    attributes:
+      - ref: gen_ai.agent.execution.id
+        requirement_level: required
+      - ref: gen_ai.agent.resumed_from.type
+        requirement_level:
+          conditionally_required: When the resumed work begins a new active execution segment.
+      - ref: gen_ai.agent.resumed_from.id
+        requirement_level:
+          conditionally_required: When the resumed work begins a new active execution segment.
+      - ref: gen_ai.agent.id
+        requirement_level: recommended
+
+  - name: gen_ai.agent.pause.resolved
+    requirement_level: recommended
+    brief: A pause reached its terminal outcome.
+    note: >
+      Records the terminal outcome of a pause as a first-class record rather
+      than leaving it implicit. A `refused` resolution is not an error and
+      instrumentations MUST NOT record it as one; `expired` means a
+      configured deadline passed and this record says so.
+
+      An `expired` resolution is a record of absence, not an inference from
+      absence of record: instrumentations SHOULD emit it when the pause has a
+      configured deadline and that deadline passes without a decision, and
+      MUST NOT emit `expired` for a pause that has no configured deadline.
+      The deadline itself is producer-local configuration and is not
+      represented in telemetry; the requirement constrains producer behavior
+      and is not validatable from the record alone. What unresolved silence
+      means, for example a producer that died holding the pause, is consumer
+      policy and is deliberately not defined by this vocabulary.
+    stability: development
+    attributes:
+      - ref: gen_ai.agent.execution.id
+        requirement_level: required
+      - ref: gen_ai.agent.pause.id
+        requirement_level: required
+      - ref: gen_ai.agent.pause.resolution
+        requirement_level: required
+      - ref: gen_ai.agent.id
+        requirement_level: recommended
