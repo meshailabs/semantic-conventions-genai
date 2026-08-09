@@ -67,9 +67,7 @@ def _emit(event_name: str, attributes: dict) -> None:
 
 
 def _invoke_agent_span():
-    span = _reference_tracer.start_as_current_span(
-        f"invoke_agent {AGENT_NAME}", kind=SpanKind.INTERNAL
-    )
+    span = _reference_tracer.start_as_current_span(f"invoke_agent {AGENT_NAME}", kind=SpanKind.INTERNAL)
     return span
 
 
@@ -122,9 +120,7 @@ def run_approved_flow(checkpointer: InMemorySaver):
         span.set_attribute("gen_ai.operation.name", "invoke_agent")
         span.set_attribute("gen_ai.agent.name", AGENT_NAME)
         span.set_attribute("gen_ai.agent.execution.id", thread_id)
-        pause_id, checkpoint_id = _pause_until_interrupt(
-            build_graph(checkpointer), config, "release payment batch"
-        )
+        pause_id, checkpoint_id = _pause_until_interrupt(build_graph(checkpointer), config, "release payment batch")
     # Segment 1's span is closed; the hosting process could exit here.
 
     # A different graph instance over the same checkpointer models a restart
