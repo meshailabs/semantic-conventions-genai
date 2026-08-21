@@ -29,6 +29,7 @@
     "gen_ai.invoke_agent.internal": [
       "gen_ai.agent.description",
       "gen_ai.agent.name",
+      "gen_ai.conversation.id",
       "gen_ai.input.messages",
       "gen_ai.operation.name",
       "gen_ai.output.messages",
@@ -48,7 +49,29 @@
       "gen_ai.usage.output_tokens"
     ]
   },
-  "events": {},
+  "events": {
+    "gen_ai.agent.pause.resolved": [
+      "gen_ai.agent.execution.id",
+      "gen_ai.agent.id",
+      "gen_ai.agent.name",
+      "gen_ai.agent.pause.id",
+      "gen_ai.agent.pause.resolution"
+    ],
+    "gen_ai.agent.paused": [
+      "gen_ai.agent.execution.id",
+      "gen_ai.agent.id",
+      "gen_ai.agent.name",
+      "gen_ai.agent.pause.id",
+      "gen_ai.agent.pause.reason"
+    ],
+    "gen_ai.agent.resumed": [
+      "gen_ai.agent.execution.id",
+      "gen_ai.agent.id",
+      "gen_ai.agent.name",
+      "gen_ai.agent.resumed_from.id",
+      "gen_ai.agent.resumed_from.type"
+    ]
+  },
   "metrics": {
     "gen_ai.client.operation.duration": [
       "gen_ai.operation.name",

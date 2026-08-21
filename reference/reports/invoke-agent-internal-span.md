@@ -6,15 +6,15 @@
 
 | Attribute | Supporting Libraries |
 | --- | --- |
-| gen_ai.operation.name | [agent-framework], [agent-lifecycle], [autogen], [crewai], [google-adk], [langchain], [openai-agents], [pydantic-ai] |
+| gen_ai.operation.name | [agent-framework], [autogen], [crewai], [google-adk], [langchain], [openai-agents], [pydantic-ai] |
 
 ## Conditionally Required
 
 | Attribute | Supporting Libraries |
 | --- | --- |
 | gen_ai.agent.description | [agent-framework], [autogen] |
-| gen_ai.agent.name | [agent-framework], [agent-lifecycle], [autogen], [crewai], [google-adk], [langchain], [openai-agents], [pydantic-ai] |
-| gen_ai.conversation.id | [google-adk] |
+| gen_ai.agent.name | [agent-framework], [autogen], [crewai], [google-adk], [langchain], [openai-agents], [pydantic-ai] |
+| gen_ai.conversation.id | [agent-framework], [google-adk] |
 | gen_ai.data_source.id | (none) |
 | gen_ai.output.type | (none) |
 | gen_ai.request.choice.count | [agent-framework], [crewai], [google-adk] |
@@ -47,7 +47,6 @@
 | gen_ai.tool.definitions | [agent-framework], [autogen], [crewai], [google-adk], [langchain], [openai-agents], [pydantic-ai] |
 
 [agent-framework]: ../scenarios/agent-framework/scenario.py
-[agent-lifecycle]: ../scenarios/agent-lifecycle/scenario.py
 [autogen]: ../scenarios/autogen/scenario.py
 [crewai]: ../scenarios/crewai/scenario.py
 [google-adk]: ../scenarios/google-adk/scenario.py
