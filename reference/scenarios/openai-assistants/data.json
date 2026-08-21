@@ -41,19 +41,6 @@
       "server.port"
     ]
   },
-  "events": {
-    "gen_ai.agent.paused": [
-      "gen_ai.agent.execution.id",
-      "gen_ai.agent.id",
-      "gen_ai.agent.name",
-      "gen_ai.agent.pause.id",
-      "gen_ai.agent.pause.reason"
-    ],
-    "gen_ai.agent.resumed": [
-      "gen_ai.agent.execution.id",
-      "gen_ai.agent.id",
-      "gen_ai.agent.name"
-    ]
-  },
+  "events": {},
   "metrics": {}
 }
