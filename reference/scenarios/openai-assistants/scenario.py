@@ -11,7 +11,9 @@ from urllib.parse import urlparse
 from openai import OpenAI
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind, StatusCode
-from reference_shared import flush_and_shutdown, setup_otel
+from reference_shared import flush_and_shutdown, reference_event_logger, setup_otel
+
+_LIFECYCLE_LOGGER = "openai_assistants.lifecycle.reference"
 
 MOCK_BASE_URL = os.environ["MOCK_LLM_URL"]
 _parsed = urlparse(MOCK_BASE_URL)
@@ -138,6 +140,29 @@ def run_invoke_agent(client):
                 submit_tool_outputs = getattr(required_action, "submit_tool_outputs", None)
                 tool_calls = getattr(submit_tool_outputs, "tool_calls", []) or []
 
+                # The run reports its own suspended state: the service holds
+                # it in `requires_action` until the caller supplies outputs
+                # for the calls it lists, so the pause and what it waits on
+                # both come from the run object. The run also names what it
+                # waits for, and submitting tool outputs is the caller's job
+                # rather than a person's.
+                pause_reason = (
+                    "external_system"
+                    if required_action.type == "submit_tool_outputs"
+                    else "human_input"
+                )
+                reference_event_logger(_LIFECYCLE_LOGGER).emit(
+                    event_name="gen_ai.agent.paused",
+                    body="paused",
+                    attributes={
+                        "gen_ai.agent.execution.id": run.id,
+                        "gen_ai.agent.pause.id": tool_calls[0].id,
+                        "gen_ai.agent.pause.reason": pause_reason,
+                        "gen_ai.agent.id": assistant.id,
+                        "gen_ai.agent.name": assistant.name,
+                    },
+                )
+
                 for tool_call in tool_calls:
                     function_call = getattr(tool_call, "function", None)
                     tool_call_id = getattr(tool_call, "id", None)
@@ -182,6 +207,19 @@ def run_invoke_agent(client):
                     thread_id=thread.id,
                     run_id=run.id,
                     tool_outputs=tool_outputs,
+                )
+
+                # Submitting the outputs continues the same run inside the
+                # still-open invoke_agent span, so this segment records no
+                # resumed_from pair.
+                reference_event_logger(_LIFECYCLE_LOGGER).emit(
+                    event_name="gen_ai.agent.resumed",
+                    body="resumed",
+                    attributes={
+                        "gen_ai.agent.execution.id": run.id,
+                        "gen_ai.agent.id": assistant.id,
+                        "gen_ai.agent.name": assistant.name,
+                    },
                 )
 
             # Poll for completion (mock returns completed immediately)
