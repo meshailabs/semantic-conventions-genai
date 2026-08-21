@@ -146,11 +146,7 @@ def run_invoke_agent(client):
                 # both come from the run object. The run also names what it
                 # waits for, and submitting tool outputs is the caller's job
                 # rather than a person's.
-                pause_reason = (
-                    "external_system"
-                    if required_action.type == "submit_tool_outputs"
-                    else "human_input"
-                )
+                pause_reason = "external_system" if required_action.type == "submit_tool_outputs" else "human_input"
                 reference_event_logger(_LIFECYCLE_LOGGER).emit(
                     event_name="gen_ai.agent.paused",
                     body="paused",
