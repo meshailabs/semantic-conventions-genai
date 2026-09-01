@@ -1043,11 +1043,9 @@ attributes:
     type: string
     brief: Identifier of a suspension boundary where agent execution paused awaiting an external condition.
     note: |
-      Identifies one pause so that later records can reference it: a
-      `gen_ai.agent.pause.resolved` event resolves it, and a
-      `gen_ai.agent.resumed` event may name it via
-      `gen_ai.agent.resumed_from.id`. The id only needs to be unique within its
-      `gen_ai.agent.execution.id`.
+      Identifies one pause so that a later `gen_ai.agent.resumed` event may
+      name it via `gen_ai.agent.resumed_from.id`. The id only needs to be
+      unique within its `gen_ai.agent.execution.id`.
     examples: ["pause_01J9Z3F", "approval-7741"]
     stability: development
   - key: gen_ai.agent.pause.reason
@@ -1061,53 +1059,8 @@ attributes:
           value: "external_system"
           brief: Paused awaiting an external system or callback.
           stability: development
-        - id: rate_limit
-          value: "rate_limit"
-          brief: Paused due to provider or tool rate limiting.
-          stability: development
-        - id: scheduled_delay
-          value: "scheduled_delay"
-          brief: Paused until a scheduled time or deferred resumption.
-          stability: development
     brief: The reason agent execution paused.
-    examples: ["human_input", "scheduled_delay"]
-    stability: development
-  - key: gen_ai.agent.pause.deadline
-    type: string
-    brief: The configured deadline of a pause, as an RFC 3339 timestamp.
-    note: |
-      When present, lets a consumer distinguish a pending pause whose
-      deadline lies ahead, a pause whose deadline has passed while the
-      expiry record is in flight or the producer has died, and a pause with
-      no deadline that may pend indefinitely. Recording it does not change
-      the rule that the meaning of unresolved silence is consumer policy;
-      it gives that policy something to act on.
-    examples: ["2026-08-09T18:00:00Z"]
-    stability: development
-  - key: gen_ai.agent.pause.resolution
-    type:
-      members:
-        - id: approved
-          value: "approved"
-          brief: The pause was resolved affirmatively; execution is permitted to continue.
-          stability: development
-        - id: refused
-          value: "refused"
-          brief: A human or policy declined; execution ends at this boundary.
-          stability: development
-        - id: expired
-          value: "expired"
-          brief: A configured deadline passed with no decision; execution ends at this boundary.
-          stability: development
-    brief: The terminal outcome of a pause.
-    note: |
-      A pause reaches at most one terminal resolution: `approved`, `refused`,
-      or `expired`. Until a resolution record exists the pause is pending,
-      full stop: consumers MUST NOT infer an outcome from the absence of a
-      resolution record. A refusal is not an error and an expiry is not a
-      still-pending pause; they are distinct terminal outcomes with different
-      operational owners.
-    examples: ["approved", "expired"]
+    examples: ["human_input", "external_system"]
     stability: development
   - key: gen_ai.agent.checkpoint.id
     type: string
