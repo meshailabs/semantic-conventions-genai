@@ -117,10 +117,8 @@ out, or exported in a separate trace.
 resumed record can tell what it references without resolving the
 counterpart event, which may be closed, sampled out, or exported in a
 different trace. It is carried as a flat attribute alongside
-`gen_ai.agent.resumed_from.id`, rather than as a structured value;
-`gen_ai.tool.type` alongside `gen_ai.tool.call.id` is the existing
-precedent, and grouping resumptions by boundary type stays an ordinary
-query. Instrumentations MUST record
+`gen_ai.agent.resumed_from.id`, following `gen_ai.tool.type` and
+`gen_ai.tool.call.id`. Instrumentations MUST record
 `gen_ai.agent.resumed_from.type` and `gen_ai.agent.resumed_from.id`
 together or not at all.
 
