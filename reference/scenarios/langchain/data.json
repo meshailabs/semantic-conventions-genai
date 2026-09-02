@@ -37,21 +37,17 @@
       "gen_ai.retrieval.top_k"
     ]
   },
-  "events": {
-    "gen_ai.agent.checkpointed": [
-      "gen_ai.agent.checkpoint.id",
-      "gen_ai.agent.name",
-      "gen_ai.agent.pause.id"
-    ],
-    "gen_ai.agent.paused": [
-      "gen_ai.agent.name",
-      "gen_ai.agent.pause.id"
-    ],
-    "gen_ai.agent.resumed": [
-      "gen_ai.agent.name",
-      "gen_ai.agent.resumed_from.id",
-      "gen_ai.agent.resumed_from.type"
-    ]
-  },
-  "metrics": {}
+  "events": {},
+  "metrics": {},
+  "findings": [
+    {
+      "id": "genai_expected_attribute_missing",
+      "message": "Span 'invoke_agent weather-agent' (operation 'invoke_agent') is missing expected attribute 'gen_ai.response.finish_reasons'",
+      "context": {
+        "missing_attribute": "gen_ai.response.finish_reasons",
+        "operation": "invoke_agent"
+      }
+    }
+  ],
+  "entities": {}
 }

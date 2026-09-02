@@ -6,12 +6,7 @@ import os
 from typing import TypedDict
 
 from langchain_core.tools import tool
-from reference_shared import (
-    flush_and_shutdown,
-    reference_event_logger,
-    reference_tracer,
-    setup_otel,
-)
+from reference_shared import flush_and_shutdown, reference_tracer, setup_otel
 
 MOCK_BASE_URL = os.environ["MOCK_LLM_URL"] + "/v1"
 
@@ -20,7 +15,6 @@ AGENT_NAME = "weather-agent"
 AGENT_SYSTEM_PROMPT = "You are a helpful weather assistant."
 
 _reference_tracer = reference_tracer()
-_LIFECYCLE_LOGGER = "langchain.lifecycle.reference"
 
 
 @tool
@@ -266,80 +260,6 @@ async def run_workflow_reference():
         print(f"    -> {final_output[:60]}")
 
 
-def approval_gate(state: GraphState) -> GraphState:
-    """Suspend the graph until an out-of-band decision arrives.
-
-    `interrupt()` is LangGraph's durable suspend: the checkpointer persists the
-    graph state and this call returns only when a later invocation delivers a
-    `Command(resume=...)`, possibly from a different process.
-    """
-    from langgraph.types import interrupt
-
-    decision = interrupt({"proposed": state["messages"][-1]})
-    return {"messages": state["messages"] + [f"gate: {decision}"]}
-
-
-async def run_durable_interrupt_reference():
-    """Scenario: LangGraph durable interrupt, checkpoint, and resume."""
-    print("  [lifecycle] LangGraph durable interrupt, checkpoint and resume")
-    from langgraph.checkpoint.memory import InMemorySaver
-    from langgraph.graph import END, START, StateGraph
-    from langgraph.types import Command
-
-    builder = StateGraph(GraphState)
-    builder.add_node("agent", agent_node)
-    builder.add_node("approval_gate", approval_gate)
-    builder.add_edge(START, "agent")
-    builder.add_edge("agent", "approval_gate")
-    builder.add_edge("approval_gate", END)
-    graph = builder.compile(checkpointer=InMemorySaver())
-
-    input_text = "What's the weather in Seattle?"
-    config = {"configurable": {"thread_id": "weather-thread-1"}}
-
-    # First invocation runs the agent node and suspends at the gate. LangGraph
-    # reports the interrupts it raised under the __interrupt__ key.
-    suspended = await graph.ainvoke({"messages": [input_text]}, config=config)
-    (pause,) = suspended["__interrupt__"]
-
-    # The checkpointer persisted the suspended state. The checkpoint id comes
-    # from the snapshot LangGraph returns, not from the config passed in.
-    snapshot = await graph.aget_state(config)
-    checkpoint_id = snapshot.config["configurable"]["checkpoint_id"]
-
-    reference_event_logger(_LIFECYCLE_LOGGER).emit(
-        event_name="gen_ai.agent.paused",
-        body="paused",
-        attributes={
-            "gen_ai.agent.pause.id": pause.id,
-            "gen_ai.agent.name": AGENT_NAME,
-        },
-    )
-    reference_event_logger(_LIFECYCLE_LOGGER).emit(
-        event_name="gen_ai.agent.checkpointed",
-        body="checkpointed",
-        attributes={
-            "gen_ai.agent.checkpoint.id": checkpoint_id,
-            "gen_ai.agent.pause.id": pause.id,
-            "gen_ai.agent.name": AGENT_NAME,
-        },
-    )
-
-    # A later invocation continues the run from the persisted checkpoint.
-    resumed = await graph.ainvoke(Command(resume="approved"), config=config)
-
-    reference_event_logger(_LIFECYCLE_LOGGER).emit(
-        event_name="gen_ai.agent.resumed",
-        body="resumed",
-        attributes={
-            "gen_ai.agent.resumed_from.type": "checkpoint",
-            "gen_ai.agent.resumed_from.id": checkpoint_id,
-            "gen_ai.agent.name": AGENT_NAME,
-        },
-    )
-    print(f"    -> {str(resumed['messages'][-1])[:60]}")
-
-
 def main():
     print("=== Reference Implementation: LangChain Reference ===")
 
@@ -348,7 +268,6 @@ def main():
     run_plan_and_execute_reference()
     run_execute_tool_reference()
     asyncio.run(run_workflow_reference())
-    asyncio.run(run_durable_interrupt_reference())
 
     flush_and_shutdown(tp, lp, mp)
 
