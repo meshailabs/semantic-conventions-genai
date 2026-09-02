@@ -302,17 +302,15 @@ async def run_durable_interrupt_reference():
     suspended = await graph.ainvoke({"messages": [input_text]}, config=config)
     (pause,) = suspended["__interrupt__"]
 
-    # The checkpointer persisted the suspended state. Both ids come from the
-    # snapshot LangGraph returns, not from the config passed in.
+    # The checkpointer persisted the suspended state. The checkpoint id comes
+    # from the snapshot LangGraph returns, not from the config passed in.
     snapshot = await graph.aget_state(config)
-    execution_id = snapshot.config["configurable"]["thread_id"]
     checkpoint_id = snapshot.config["configurable"]["checkpoint_id"]
 
     reference_event_logger(_LIFECYCLE_LOGGER).emit(
         event_name="gen_ai.agent.paused",
         body="paused",
         attributes={
-            "gen_ai.agent.execution.id": execution_id,
             "gen_ai.agent.pause.id": pause.id,
             "gen_ai.agent.name": AGENT_NAME,
         },
@@ -321,7 +319,6 @@ async def run_durable_interrupt_reference():
         event_name="gen_ai.agent.checkpointed",
         body="checkpointed",
         attributes={
-            "gen_ai.agent.execution.id": execution_id,
             "gen_ai.agent.checkpoint.id": checkpoint_id,
             "gen_ai.agent.pause.id": pause.id,
             "gen_ai.agent.name": AGENT_NAME,
@@ -330,13 +327,11 @@ async def run_durable_interrupt_reference():
 
     # A later invocation continues the run from the persisted checkpoint.
     resumed = await graph.ainvoke(Command(resume="approved"), config=config)
-    resumed_snapshot = await graph.aget_state(config)
 
     reference_event_logger(_LIFECYCLE_LOGGER).emit(
         event_name="gen_ai.agent.resumed",
         body="resumed",
         attributes={
-            "gen_ai.agent.execution.id": resumed_snapshot.config["configurable"]["thread_id"],
             "gen_ai.agent.resumed_from.type": "checkpoint",
             "gen_ai.agent.resumed_from.id": checkpoint_id,
             "gen_ai.agent.name": AGENT_NAME,

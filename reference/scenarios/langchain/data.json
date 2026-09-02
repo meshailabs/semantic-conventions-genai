@@ -40,17 +40,14 @@
   "events": {
     "gen_ai.agent.checkpointed": [
       "gen_ai.agent.checkpoint.id",
-      "gen_ai.agent.execution.id",
       "gen_ai.agent.name",
       "gen_ai.agent.pause.id"
     ],
     "gen_ai.agent.paused": [
-      "gen_ai.agent.execution.id",
       "gen_ai.agent.name",
       "gen_ai.agent.pause.id"
     ],
     "gen_ai.agent.resumed": [
-      "gen_ai.agent.execution.id",
       "gen_ai.agent.name",
       "gen_ai.agent.resumed_from.id",
       "gen_ai.agent.resumed_from.type"
