@@ -117,9 +117,7 @@ out, or exported in a separate trace.
 resumed record can tell what it references without resolving the
 counterpart event, which may be closed, sampled out, or exported in a
 different trace. It is carried as a flat attribute alongside
-`gen_ai.agent.resumed_from.id`, rather than as a structured value, per
-the authoring guidance to represent complex values as flat attributes
-and to assume backends do not index their individual properties;
+`gen_ai.agent.resumed_from.id`, rather than as a structured value;
 `gen_ai.tool.type` alongside `gen_ai.tool.call.id` is the existing
 precedent, and grouping resumptions by boundary type stays an ordinary
 query. Instrumentations MUST record
@@ -428,7 +426,7 @@ what `gen_ai.workflow.name` means in the context of that framework.
 | Value | Description | Stability |
 | --- | --- | --- |
 | `checkpoint` | The suspended boundary was a persisted checkpoint. | ![Development](https://img.shields.io/badge/-development-blue) |
-| `pause` | The suspended boundary was a pause with no checkpoint (for example a human-approval wait or scheduled delay). | ![Development](https://img.shields.io/badge/-development-blue) |
+| `pause` | The suspended boundary was a pause with no persisted checkpoint, such as a human-approval wait. | ![Development](https://img.shields.io/badge/-development-blue) |
 
 ---
 
