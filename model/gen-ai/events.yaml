@@ -64,7 +64,7 @@ events:
     requirement_level: recommended
     brief: >
       Agent execution paused awaiting an external condition, such as human
-      approval, an external system, rate limiting, or a scheduled delay.
+      approval or an external system.
     note: >
       Records the suspension of a long-running or asynchronous agent
       execution. The pause id identifies this boundary for a later
@@ -90,10 +90,9 @@ events:
       Records the persistence of agent state such that execution can later
       continue from the persisted state, including across process restarts or
       in a different worker. When the checkpoint is taken at a pause
-      boundary, recording the pause id joins the checkpoint to the pause it
-      was taken at, so a consumer reaching the checkpoint through
-      `gen_ai.agent.resumed_from` can also reach the resolution that
-      authorized continuing from it without reconstructing record order.
+      boundary, recording the pause id joins the checkpoint to that pause, so
+      a consumer reaching the checkpoint through `gen_ai.agent.resumed_from`
+      can also identify the pause without reconstructing record order.
     stability: development
     attributes:
       - ref: gen_ai.agent.execution.id

@@ -1080,7 +1080,7 @@ attributes:
           stability: development
         - id: pause
           value: "pause"
-          brief: The suspended boundary was a pause with no checkpoint (for example a human-approval wait or scheduled delay).
+          brief: The suspended boundary was a pause with no persisted checkpoint, such as a human-approval wait.
           stability: development
     brief: The kind of suspended boundary this resumed segment continues from.
     note: |
@@ -1088,9 +1088,7 @@ attributes:
       resumed record can tell what it references without resolving the
       counterpart event, which may be closed, sampled out, or exported in a
       different trace. It is carried as a flat attribute alongside
-      `gen_ai.agent.resumed_from.id`, rather than as a structured value, per
-      the authoring guidance to represent complex values as flat attributes
-      and to assume backends do not index their individual properties;
+      `gen_ai.agent.resumed_from.id`, rather than as a structured value;
       `gen_ai.tool.type` alongside `gen_ai.tool.call.id` is the existing
       precedent, and grouping resumptions by boundary type stays an ordinary
       query. Instrumentations MUST record
